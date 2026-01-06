@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'attendanceapi',
     'userauth',
+    'base',
 ]
 
 MIDDLEWARE = [
@@ -80,6 +81,8 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'smartattendancesystemapi.wsgi.application'
+
+AUTH_USER_MODEL = 'userauth.CustomUser'
 
 
 # Database
