@@ -73,114 +73,61 @@ def recognize_frame(request):
 @api_view(["POST"])
 def mark_attendance(request):
     """
-    Recognize faces and mark attendance.
-    Mirrors process_frame_logic without rendering or streaming.
+    Marks attendance using a face frame.
+    Immutable attendance record.
     """
 
-    data = request.data
-
-    if isinstance(data, str):
-        frame_data = data
-    else:
-        frame_data = data.get("frame")
+    frame_data = request.data.get("frame")
 
     if not frame_data:
         return Response(
-            {"error": "No frame data provided"},
+            {"error": "frame is required"},
             status=status.HTTP_400_BAD_REQUEST
         )
 
     try:
-        if "," in frame_data:
-            frame_data = frame_data.split(",")[1]
+        # 1️⃣ Face embedding
+        embedding = extract_face_embedding(frame_data)
 
-        frame_bytes = base64.b64decode(frame_data)
-        frame = cv2.imdecode(
-            np.frombuffer(frame_bytes, np.uint8),
-            cv2.IMREAD_COLOR
-        )
-
-        if frame is None:
+        if embedding is None:
             return Response(
-                {"error": "Invalid image data"},
+                {"error": "No face detected"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        faces = recognize_faces_from_frame(frame)
+        # 2️⃣ Registered user
+        user = recognize_face(embedding)
 
-        if not faces:
-            return Response(
-                {"message": "No faces detected"},
-                status=status.HTTP_200_OK
+        if user:
+            attendance = Attendance.objects.create(
+                user=user,
+                timestamp=timezone.now()
             )
 
-        lagos_tz = pytz.timezone("Africa/Lagos")
-        now_local = now().astimezone(lagos_tz)
-        today = now_local.date()
+            return Response({
+                "status": "success",
+                "user_type": "registered",
+                "user_id": user.id,
+                "attendance_id": attendance.id,
+                "timestamp": attendance.timestamp
+            }, status=status.HTTP_201_CREATED)
 
-        marked = []
+        # 3️⃣ Temporary user
+        temp_user, created = match_or_create_temp_user(embedding)
 
-        with transaction.atomic():
-            for face in faces:
-                if not face["recognized"]:
-                    temp_user, created = match_or_create_temp_user(face["embedding"])
-
-                    TempAttendance.objects.get_or_create(
-                        temp_user=temp_user,
-                        date=today
-                    )
-
-                    marked.append({
-                        "visitor_id": str(temp_user.id),
-                        "recognized": False,
-                        "new": created
-                    })
-                    continue
-
-                user_id = face["user_id"]
-                confidence = face["confidence"]
-
-                embedding = FaceEmbedding.objects.select_related("user").filter(
-                    user_id=user_id
-                ).first()
-
-                if not embedding:
-                    continue
-
-                user = embedding.user
-
-                attendance, created = Attendance.objects.get_or_create(
-                    member=user,
-                    date=today,
-                    defaults={
-                        "face_detections": 1,
-                        "time": now_local.time(),
-                        "distance": 1 - confidence,
-                        "gender": user.gender,
-                        "role": user.role,
-                        "department": user.department,
-                        "recognized_emotion": "Neutral",
-                    }
-                )
-
-                if not created:
-                    attendance.face_detections += 1
-                    attendance.save()
-
-                marked.append({
-                    "user_id": str(user.id),
-                    "name": f"{user.first_name} {user.last_name}",
-                    "confidence": confidence,
-                    "new": created
-                })
-
-        return Response(
-            {
-                "marked": marked,
-                "count": len(marked)
-            },
-            status=status.HTTP_200_OK
+        attendance = Attendance.objects.create(
+            temp_user=temp_user,
+            timestamp=timezone.now()
         )
+
+        return Response({
+            "status": "success",
+            "user_type": "temporary",
+            "temp_user_id": temp_user.id,
+            "attendance_id": attendance.id,
+            "timestamp": attendance.timestamp,
+            "created": created
+        }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
         return Response(
