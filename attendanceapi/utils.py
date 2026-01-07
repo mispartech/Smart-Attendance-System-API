@@ -4,6 +4,18 @@ from django.utils.timezone import now
 from django.utils.dateparse import parse_date
 from .models import Attendance, TempAttendance
 
+FACE_APP = None
+
+def get_face_app():
+    global FACE_APP
+    if FACE_APP is None:
+        FACE_APP = FaceAnalysis(
+            name='buffalo_s',
+            providers=['CPUExecutionProvider'],
+            allowed_modules=['detection', 'recognition']
+        )
+        FACE_APP.prepare(ctx_id=0, det_size=(640, 640))
+    return FACE_APP
 
 def get_filtered_attendance_queryset(request):
     queryset = Attendance.objects.select_related('member')

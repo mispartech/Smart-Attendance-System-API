@@ -2,7 +2,7 @@ import numpy as np
 from django.utils import timezone
 
 from attendanceapi.models import FaceEmbedding
-from attendanceapi.utils import get_face_app, cosine_distance
+from attendanceapi.utils import get_face_app
 
 
 def recognize_faces_from_frame(frame, threshold=0.5):
@@ -26,7 +26,7 @@ def recognize_faces_from_frame(frame, threshold=0.5):
         best_distance = float("inf")
 
         for record in embeddings:
-            distance = cosine_distance(
+            distance = cosine(
                 np.array(record.embedding),
                 face.embedding
             )
