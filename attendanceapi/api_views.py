@@ -114,6 +114,18 @@ def mark_attendance(request):
         with transaction.atomic():
             for face in faces:
                 if not face["recognized"]:
+                    temp_user, created = match_or_create_temp_user(face["embedding"])
+
+                    TempAttendance.objects.get_or_create(
+                        temp_user=temp_user,
+                        date=today
+                    )
+
+                    marked.append({
+                        "visitor_id": str(temp_user.id),
+                        "recognized": False,
+                        "new": created
+                    })
                     continue
 
                 user_id = face["user_id"]

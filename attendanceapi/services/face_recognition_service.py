@@ -1,8 +1,10 @@
 import numpy as np
 from django.utils import timezone
 
-from attendanceapi.models import FaceEmbedding
+from attendanceapi.models import FaceEmbedding, TempUser, TempAttendance
 from attendanceapi.utils import get_face_app
+
+from scipy.spatial.distance import cosine
 
 
 def recognize_faces_from_frame(frame, threshold=0.5):
@@ -48,3 +50,35 @@ def recognize_faces_from_frame(frame, threshold=0.5):
             })
 
     return results
+
+
+TEMP_THRESHOLD = 0.65
+
+def match_or_create_temp_user(embedding):
+    """
+    Match unrecognized face to existing TempUser or create a new one.
+    Returns (temp_user, created)
+    """
+
+    temps = TempUser.objects.all()
+
+    best_match = None
+    best_distance = float("inf")
+
+    for temp in temps:
+        stored_embedding = np.array(temp.face_embedding)
+        dist = cosine(embedding, stored_embedding)
+
+        if dist < best_distance:
+            best_distance = dist
+            best_match = temp
+
+    if best_match and best_distance < TEMP_THRESHOLD:
+        best_match.appearances += 1
+        best_match.save()
+        return best_match, False
+
+    return TempUser.objects.create(
+        face_embedding=embedding.tolist()
+    ), True
+
