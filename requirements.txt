@@ -2,7 +2,8 @@ asgiref==3.11.0
 Django==5.2.10
 django-cors-headers==4.9.0
 djangorestframework==3.16.1
-numpy==2.4.0
+numpy==2.2.6
+opencv-python==4.12.0.88
 pillow==12.1.0
 scipy==1.16.3
 sqlparse==0.5.5
