@@ -5,61 +5,70 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from attendanceapi.models import Attendance, FaceEmbedding
-from attendanceapi.services.face_recognition_service import recognize_faces_from_frame
+from attendanceapi.services.face_recognition_service import (
+    extract_face_embedding,
+    recognize_face,
+    match_or_create_temp_user,
+    recognize_faces_from_frame
+)
 from base.models import Department
 
 
 @api_view(["POST"])
 def recognize_frame(request):
     """
-    Receives a base64-encoded image and returns face recognition results.
+    Accepts a base64 image frame and returns:
+    - Registered user if matched
+    - Temporary user if not matched
     """
 
-    data = request.data
-
-    # Handle raw string payloads
-    if isinstance(data, str):
-        frame_data = data
-    else:
-        frame_data = data.get("frame")
-
+    frame_data = request.data.get("frame")
 
     if not frame_data:
         return Response(
-            {"error": "No frame data provided"},
+            {"error": "frame is required"},
             status=status.HTTP_400_BAD_REQUEST
         )
 
     try:
-        # Remove data URL prefix if present
-        if "," in frame_data:
-            frame_data = frame_data.split(",")[1]
+        # 🔹 Step 1: extract embedding
+        embedding = extract_face_embedding(frame_data)
 
-        frame_bytes = base64.b64decode(frame_data)
-        np_arr = np.frombuffer(frame_bytes, np.uint8)
-        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
-        if frame is None:
+        if embedding is None:
             return Response(
-                {"error": "Invalid image data"},
+                {"error": "No face detected"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        results = recognize_faces_from_frame(frame)
+        # 🔹 Step 2: try registered users
+        user = recognize_face(embedding)
 
-        return Response(
-            {
-                "faces": results,
-                "count": len(results)
-            },
-            status=status.HTTP_200_OK
-        )
+        if user:
+            return Response({
+                "status": "recognized",
+                "user_type": "registered",
+                "user_id": user.id,
+                "full_name": user.get_full_name(),
+            }, status=status.HTTP_200_OK)
+
+        # 🔹 Step 3: temp user fallback
+        temp_user, created = match_or_create_temp_user(embedding)
+
+        return Response({
+            "status": "recognized",
+            "user_type": "temporary",
+            "temp_user_id": temp_user.id,
+            "created": created,
+            "appearances": temp_user.appearances,
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
+        # 🔥 NEVER silently fail
         return Response(
             {"error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
 
 @api_view(["POST"])
 def mark_attendance(request):
