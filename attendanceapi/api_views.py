@@ -10,8 +10,8 @@ from attendanceapi.services.face_recognition_service import (
     recognize_face,
     match_or_create_temp_user,
     recognize_faces_from_frame,
-    has_recent_attendance
 )
+from attendanceapi.services.attendance_service import has_recent_attendance
 from base.models import Department
 
 
@@ -46,11 +46,13 @@ def recognize_frame(request):
 
         if user:
             return Response({
-                "status": "recognized",
-                "user_type": "registered",
-                "user_id": user.id,
-                "full_name": user.get_full_name(),
-            }, status=status.HTTP_200_OK)
+            "status": "success",
+            "code": "FACE_RECOGNIZED",
+            "message": "Frame processed successfully",
+            "data": {
+                "faces": recognized_faces
+            }
+        }, status=status.HTTP_200_OK)
 
         # 🔹 Step 3: temp user fallback
         temp_user, created = match_or_create_temp_user(embedding)
@@ -111,13 +113,15 @@ def mark_attendance(request):
                 timestamp=timezone.now()
             )
 
-            return Response({
-                "status": "success",
-                "user_type": "registered",
-                "user_id": user.id,
+        return Response({
+            "status": "success",
+            "code": "ATTENDANCE_MARKED",
+            "message": "Attendance recorded successfully",
+            "data": {
                 "attendance_id": attendance.id,
-                "timestamp": attendance.timestamp
-            }, status=status.HTTP_201_CREATED)
+                "user_id": user.id
+            }
+        }, status=status.HTTP_201_CREATED)
 
         # 3️⃣ Temporary user
         temp_user, created = match_or_create_temp_user(embedding)
@@ -125,7 +129,9 @@ def mark_attendance(request):
         if has_recent_attendance(temp_user=temp_user):
             return Response({
                 "status": "duplicate",
-                "message": "Attendance already marked recently"
+                "code": "ATTENDANCE_DUPLICATE",
+                "message": "Attendance already marked recently",
+                "data": {}
             }, status=status.HTTP_200_OK)
 
         attendance = Attendance.objects.create(
@@ -135,15 +141,25 @@ def mark_attendance(request):
 
         return Response({
             "status": "success",
-            "user_type": "temporary",
-            "temp_user_id": temp_user.id,
-            "attendance_id": attendance.id,
-            "timestamp": attendance.timestamp,
-            "created": created
+            "code": "TEMP_ATTENDANCE_MARKED",
+            "message": "Temporary attendance recorded",
+            "data": {
+                "temp_user_id": temp_user.id
+            }
         }, status=status.HTTP_201_CREATED)
+
 
     except Exception as e:
         return Response(
             {"error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+@api_view(["GET"])
+def health_check(request):
+    return Response({
+        "status": "success",
+        "code": "API_HEALTHY",
+        "message": "Attendance API is running",
+        "data": {}
+    })
