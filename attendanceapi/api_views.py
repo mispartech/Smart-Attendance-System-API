@@ -13,7 +13,11 @@ from attendanceapi.services.face_recognition_service import (
 )
 from attendanceapi.services.attendance_service import has_recent_attendance
 from base.models import Department
+import re
 
+BASE64_IMAGE_REGEX = re.compile(
+    r"^data:image\/(jpeg|jpg|png);base64,[A-Za-z0-9+/=]+$"
+)
 
 @api_view(["POST"])
 def recognize_frame(request):
@@ -22,14 +26,23 @@ def recognize_frame(request):
     - Registered user if matched
     - Temporary user if not matched
     """
-
     frame_data = request.data.get("frame")
 
     if not frame_data:
-        return Response(
-            {"error": "frame is required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({
+            "status": "error",
+            "code": "FRAME_MISSING",
+            "message": "Frame field is required",
+            "data": {}
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    if not isinstance(frame_data, str) or not BASE64_IMAGE_REGEX.match(frame_data):
+        return Response({
+            "status": "error",
+            "code": "INVALID_FRAME_FORMAT",
+            "message": "Frame must be a valid base64 image string",
+            "data": {}
+        }, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         # 🔹 Step 1: extract embedding
@@ -75,6 +88,28 @@ def recognize_frame(request):
 
 @api_view(["POST"])
 def mark_attendance(request):
+
+    identity = request.data.get("identity")
+
+    if not identity or not isinstance(identity, dict):
+        return Response({
+            "status": "error",
+            "code": "IDENTITY_MISSING",
+            "message": "Identity object is required",
+            "data": {}
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    identity_type = identity.get("type")
+    identity_id = identity.get("id")
+
+    if identity_type not in ["user", "temp"] or not identity_id:
+        return Response({
+            "status": "error",
+            "code": "INVALID_IDENTITY",
+            "message": "Identity type or id is invalid",
+            "data": {}
+        }, status=status.HTTP_400_BAD_REQUEST)
+
     """
     Marks attendance using a face frame.
     Immutable attendance record.
