@@ -9,7 +9,8 @@ from attendanceapi.services.face_recognition_service import (
     extract_face_embedding,
     recognize_face,
     match_or_create_temp_user,
-    recognize_faces_from_frame
+    recognize_faces_from_frame,
+    has_recent_attendance
 )
 from base.models import Department
 
@@ -99,6 +100,12 @@ def mark_attendance(request):
         user = recognize_face(embedding)
 
         if user:
+            if has_recent_attendance(user=user):
+                return Response({
+                    "status": "duplicate",
+                    "message": "Attendance already marked recently"
+                }, status=status.HTTP_200_OK)
+
             attendance = Attendance.objects.create(
                 user=user,
                 timestamp=timezone.now()
@@ -114,6 +121,12 @@ def mark_attendance(request):
 
         # 3️⃣ Temporary user
         temp_user, created = match_or_create_temp_user(embedding)
+
+        if has_recent_attendance(temp_user=temp_user):
+            return Response({
+                "status": "duplicate",
+                "message": "Attendance already marked recently"
+            }, status=status.HTTP_200_OK)
 
         attendance = Attendance.objects.create(
             temp_user=temp_user,
