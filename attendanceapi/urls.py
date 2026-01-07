@@ -6,5 +6,5 @@ urlpatterns = [
     path("recognize-frame/", recognize_frame),
     path("attendance/mark/", mark_attendance),
     path("health/", health_check),
-
+    path("version/", api_version),
 ]
