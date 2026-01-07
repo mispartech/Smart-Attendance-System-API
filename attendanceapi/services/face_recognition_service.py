@@ -82,3 +82,38 @@ def match_or_create_temp_user(embedding):
         face_embedding=embedding.tolist()
     ), True
 
+def extract_face_embedding(frame_data):
+    """
+    Accepts base64 image string.
+    Returns a mock embedding for now.
+    """
+    if not frame_data:
+        return None
+
+    # TEMP: mock embedding (replace later with real model)
+    return [0.01] * 128
+
+
+def recognize_face(embedding):
+    """
+    Attempts to match embedding with registered users.
+    Returns user object or None.
+    """
+    # TEMP: no registered user match
+    return None
+
+
+def match_or_create_temp_user(embedding):
+    """
+    Matches embedding with temp users or creates new one.
+    """
+    from attendanceapi.models import TemporaryUser
+
+    temp_user, created = TemporaryUser.objects.get_or_create(
+        default=True  # placeholder logic
+    )
+
+    temp_user.appearances += 1
+    temp_user.save()
+
+    return temp_user, created

@@ -92,7 +92,6 @@ def get_filtered_attendance_queryset(request):
     # FINAL SQL OUTPUT
     return queryset
 
-
 def base_attendance_filter(request, queryset):
     """Applies date, time, name, role, and sorting filters to any queryset."""
 
@@ -147,7 +146,6 @@ def base_attendance_filter(request, queryset):
         queryset = queryset.filter(date__range=(first_day_last_month, last_day_last_month))
 
     return queryset
-
 
 # -------------------------------
 #   1️⃣ MEMBERS ATTENDANCE
