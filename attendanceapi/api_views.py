@@ -1,4 +1,4 @@
-import base64, cv2, json, numpy as np, pytz
+import base64, cv2, json, numpy as np, pytz, re
 from django.utils.timezone import now
 from django.db import transaction
 from rest_framework.decorators import api_view
@@ -13,14 +13,16 @@ from attendanceapi.services.face_recognition_service import (
 )
 from attendanceapi.services.attendance_service import has_recent_attendance
 from base.models import Department
-import re
 
 BASE64_IMAGE_REGEX = re.compile(
-    r"^data:image\/(jpeg|jpg|png);base64,[A-Za-z0-9+/=]+$"
+    r"^[A-Za-z0-9+/=]+$"
 )
 
 @api_view(["POST"])
 def recognize_frame(request):
+    print("RAW request.data:", request.data)
+    print("Keys:", request.data.keys())
+
     """
     Accepts a base64 image frame and returns:
     - Registered user if matched
