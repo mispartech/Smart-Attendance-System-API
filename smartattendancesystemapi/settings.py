@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'attendanceapi',
     'userauth',
     'base',
+    "django_extensions",
 ]
 
 MIDDLEWARE = [
