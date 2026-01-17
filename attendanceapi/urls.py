@@ -4,8 +4,7 @@ from attendanceapi.api_views import api_version
 
 urlpatterns = [
     path("recognize-frame/", recognize_frame, name="recognize-frame"),
-    path("recognize-frame/", recognize_frame),
-    path("attendance/mark/", mark_attendance),
-    path("health/", health_check),
-    path("version/", api_version),
+    path("attendance/mark/", mark_attendance, name="mark-attendance"),
+    path("health/", health_check, name="health"),
+    path("version/", api_version, name="version"),
 ]
