@@ -204,10 +204,9 @@ def api_version(request):
     return Response({
         "status": "success",
         "code": "API_VERSION",
-        "message": "API version information",
+        "message": "API version retrieved",
         "data": {
             "name": "Smart Attendance System API",
             "version": "1.0.0",
-            "environment": "production" if not settings.DEBUG else "development"
         }
     })
