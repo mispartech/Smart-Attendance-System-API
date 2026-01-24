@@ -61,13 +61,18 @@ def recognize_frame(request):
 
         if user:
             return Response({
-            "status": "success",
-            "code": "FACE_RECOGNIZED",
-            "message": "Frame processed successfully",
-            "data": {
-                "faces": recognized_faces
-            }
-        }, status=status.HTTP_200_OK)
+                "status": "success",
+                "code": "FACE_RECOGNIZED",
+                "message": "Frame processed successfully",
+                "data": {
+                    "faces": [{
+                        "recognized": True,
+                        "user_id": str(user.id),
+                        "name": user.get_full_name() if hasattr(user, 'get_full_name') else str(user),
+                    }]
+                }
+            }, status=status.HTTP_200_OK)
+
 
         # 🔹 Step 3: temp user fallback
         temp_user, created = match_or_create_temp_user(embedding)
