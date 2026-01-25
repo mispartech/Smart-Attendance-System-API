@@ -60,10 +60,11 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  
-    "https://mispartechnologies.com",     
-    "http://16.170.213.254:8000"
+    "http://localhost:3000",
+    "https://mispartechnologies.com",
+    "https://www.mispartechnologies.com" 
 ]
+
 
 CORS_ALLOW_HEADERS = [
     "content-type",
