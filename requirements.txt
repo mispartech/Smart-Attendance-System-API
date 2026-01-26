@@ -1,5 +1,5 @@
 numpy==1.26.4
-opencv-python-headless==4.13.0.90
+opencv-python-headless==4.9.0.80  
 onnxruntime==1.23.2
 insightface==0.7.3
 albucore==0.0.24
