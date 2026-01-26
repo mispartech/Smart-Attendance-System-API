@@ -20,7 +20,7 @@ djangorestframework==3.16.1
 easydict==1.13
 flatbuffers==25.12.19
 fonttools==4.61.1
-gunicorn==22.3.1
+gunicorn
 humanfriendly==10.0
 idna==3.11
 ImageIO==2.37.2
