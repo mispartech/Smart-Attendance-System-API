@@ -55,4 +55,5 @@ EXPOSE 8000
 # ----------------------------
 # Default command
 # ----------------------------
-CMD ["gunicorn", "smartattendance.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]
+CMD ["gunicorn", "smartattendancesystemapi.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]
+
