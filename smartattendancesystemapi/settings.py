@@ -26,11 +26,10 @@ SECRET_KEY = "django-insecure-^v3uk0tza_al=41kk%h64(o%=c!4-ox8xm6hv2k+vj(8_*t7dl
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    "api.mispartechnologies.com",
-    "mispartechnologies.com",
-    "www.mispartechnologies.com",
+    ".mispartechnologies.com",
     "localhost",
     "127.0.0.1",
+    "16.170.213.254"
 ]
 
 
