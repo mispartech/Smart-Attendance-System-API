@@ -1,26 +1,58 @@
-FROM python:3.11-slim
+# ----------------------------
+# Base image
+# ----------------------------
+FROM python:3.11-slim-bullseye
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# ----------------------------
+# Metadata
+# ----------------------------
+LABEL maintainer="mispartechnologies.com"
+LABEL description="Smart Attendance System API"
 
-WORKDIR /app
+# ----------------------------
+# Set environment variables
+# ----------------------------
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=100
 
-RUN apt-get update && apt-get install -y \
+# ----------------------------
+# Install system dependencies
+# ----------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    cmake \
+    g++ \
     libgl1 \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
+# ----------------------------
+# Set working directory
+# ----------------------------
+WORKDIR /app
+
+# ----------------------------
+# Copy only requirements first for caching
+# ----------------------------
 COPY requirements.txt .
 
+# Upgrade pip/setuptools/wheel and install dependencies
 RUN pip install --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir numpy==1.26.4 \
     && pip install --no-cache-dir -r requirements.txt
 
+# ----------------------------
+# Copy the rest of the app
+# ----------------------------
 COPY . .
 
-CMD ["gunicorn", "smartattendancesystemapi.wsgi:application", "--bind", "0.0.0.0:8000"]
+# ----------------------------
+# Expose port
+# ----------------------------
+EXPOSE 8000
+
+# ----------------------------
+# Default command
+# ----------------------------
+CMD ["gunicorn", "smartattendance.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]
