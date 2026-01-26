@@ -20,14 +20,15 @@ BASE64_IMAGE_REGEX = re.compile(
 
 @api_view(["POST"])
 def recognize_frame(request):
-    print("RAW request.data:", request.data)
-    print("Keys:", request.data.keys())
-
     """
     Accepts a base64 image frame and returns:
     - Registered user if matched
     - Temporary user if not matched
     """
+
+    print("RAW request.data:", request.data)
+    print("Keys:", request.data.keys())
+
     frame_data = request.data.get("frame")
 
     if not frame_data:
@@ -38,60 +39,104 @@ def recognize_frame(request):
             "data": {}
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    if not isinstance(frame_data, str) or not BASE64_IMAGE_REGEX.match(frame_data):
-        return Response({
-            "status": "error",
-            "code": "INVALID_FRAME_FORMAT",
-            "message": "Frame must be a valid base64 image string",
-            "data": {}
-        }, status=status.HTTP_400_BAD_REQUEST)
-
     try:
-        # 🔹 Step 1: extract embedding
-        embedding = extract_face_embedding(frame_data)
+        # -------------------------------
+        # 1. Clean base64 header if exists
+        # -------------------------------
+        if "," in frame_data:
+            frame_data = frame_data.split(",")[1]
+
+        # -------------------------------
+        # 2. Decode base64 safely
+        # -------------------------------
+        try:
+            image_bytes = base64.b64decode(frame_data, validate=True)
+        except Exception:
+            return Response({
+                "status": "error",
+                "code": "INVALID_BASE64",
+                "message": "Invalid base64 image encoding",
+                "data": {}
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # -------------------------------
+        # 3. Convert to OpenCV image
+        # -------------------------------
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        if frame is None:
+            return Response({
+                "status": "error",
+                "code": "INVALID_IMAGE",
+                "message": "Decoded image is invalid or corrupted",
+                "data": {}
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # -------------------------------
+        # 4. Extract embedding
+        # -------------------------------
+        embedding = extract_face_embedding(frame)
 
         if embedding is None:
-            return Response(
-                {"error": "No face detected"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({
+                "status": "success",
+                "code": "NO_FACE",
+                "message": "No face detected in frame",
+                "data": {
+                    "faces": []
+                }
+            }, status=status.HTTP_200_OK)
 
-        # 🔹 Step 2: try registered users
+        # -------------------------------
+        # 5. Recognize registered user
+        # -------------------------------
         user = recognize_face(embedding)
 
         if user:
             return Response({
                 "status": "success",
                 "code": "FACE_RECOGNIZED",
-                "message": "Frame processed successfully",
+                "message": "Registered user recognized",
                 "data": {
                     "faces": [{
                         "recognized": True,
+                        "user_type": "registered",
                         "user_id": str(user.id),
-                        "name": user.get_full_name() if hasattr(user, 'get_full_name') else str(user),
+                        "name": user.get_full_name() if hasattr(user, "get_full_name") else str(user),
                     }]
                 }
             }, status=status.HTTP_200_OK)
 
-
-        # 🔹 Step 3: temp user fallback
+        # -------------------------------
+        # 6. Temporary user fallback
+        # -------------------------------
         temp_user, created = match_or_create_temp_user(embedding)
 
         return Response({
-            "status": "recognized",
-            "user_type": "temporary",
-            "temp_user_id": temp_user.id,
-            "created": created,
-            "appearances": temp_user.appearances,
+            "status": "success",
+            "code": "TEMP_USER",
+            "message": "Temporary user identified",
+            "data": {
+                "faces": [{
+                    "recognized": False,
+                    "user_type": "temporary",
+                    "temp_user_id": str(temp_user.id),
+                    "created": created,
+                    "appearances": temp_user.appearances,
+                }]
+            }
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        # 🔥 NEVER silently fail
-        return Response(
-            {"error": str(e)},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
+        print("🔥 recognize_frame ERROR:", str(e))
+        return Response({
+            "status": "error",
+            "code": "RECOGNITION_FAILED",
+            "message": "Internal recognition error",
+            "debug": str(e) if settings.DEBUG else "Internal error",
+            "data": {}
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(["POST"])
 def mark_attendance(request):
