@@ -1,3 +1,4 @@
+from django.conf import settings
 import base64, cv2, json, numpy as np, pytz, re
 from django.utils.timezone import now
 from django.db import transaction
@@ -169,11 +170,9 @@ def mark_attendance(request):
 
     frame_data = request.data.get("frame")
 
-    if not frame_data:
-        return Response(
-            {"error": "frame is required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    if frame_data is None or frame_data.size == 0:
+        raise ValueError("Empty frame")
+
 
     try:
         # 1️⃣ Face embedding

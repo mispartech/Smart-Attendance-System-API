@@ -87,7 +87,7 @@ def extract_face_embedding(frame_data):
     Accepts base64 image string.
     Returns a mock embedding for now.
     """
-    if not frame_data:
+    if frame_data is None or frame_data.size == 0
         return None
 
     # TEMP: mock embedding (replace later with real model)
