@@ -23,13 +23,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-^v3uk0tza_al=41kk%h64(o%=c!4-ox8xm6hv2k+vj(8_*t7dl"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = "True"
+DEBUG = True
 
 ALLOWED_HOSTS = [
-    "16.170.213.254",
+    "api.mispartechnologies.com",
+    "mispartechnologies.com",
+    "www.mispartechnologies.com",
     "localhost",
     "127.0.0.1",
 ]
+
 
 # Application definition
 
@@ -62,9 +65,9 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://mispartechnologies.com",
-    "https://www.mispartechnologies.com" 
+    "https://www.mispartechnologies.com",
+    "https://mispartechnologies.lovable.app",
 ]
-
 
 CORS_ALLOW_HEADERS = [
     "content-type",
