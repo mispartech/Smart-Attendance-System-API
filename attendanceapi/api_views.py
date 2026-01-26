@@ -139,7 +139,7 @@ def recognize_frame(request):
             "data": {}
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-@api_view(["POST"])
+api_view(["POST"])
 def mark_attendance(request):
 
     identity = request.data.get("identity")
@@ -170,9 +170,11 @@ def mark_attendance(request):
 
     frame_data = request.data.get("frame")
 
-    if frame_data is None or frame_data.size == 0:
-        raise ValueError("Empty frame")
-
+    if not frame_data:
+        return Response(
+            {"error": "frame is required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     try:
         # 1️⃣ Face embedding

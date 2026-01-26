@@ -82,17 +82,36 @@ def match_or_create_temp_user(embedding):
         face_embedding=embedding.tolist()
     ), True
 
-def extract_face_embedding(frame_data):
+def extract_face_embedding(frame):
     """
-    Accepts base64 image string.
-    Returns a mock embedding for now.
+    Accepts an OpenCV image (np.ndarray).
+    Returns a single face embedding or None if no face is detected.
     """
-    if frame_data is None or frame_data.size == 0
+
+    if frame is None:
         return None
 
-    # TEMP: mock embedding (replace later with real model)
-    return [0.01] * 128
+    if not isinstance(frame, np.ndarray):
+        raise TypeError(
+            f"Expected OpenCV frame (np.ndarray), got {type(frame)}"
+        )
 
+    if frame.size == 0:
+        return None
+
+    app = get_face_app()
+    detected_faces = app.get(frame)
+
+    if not detected_faces:
+        return None
+
+    # Take the most confident / first detected face
+    face = detected_faces[0]
+
+    if not hasattr(face, "embedding") or face.embedding is None:
+        return None
+
+    return np.array(face.embedding)
 
 def recognize_face(embedding):
     """
@@ -102,8 +121,6 @@ def recognize_face(embedding):
     # TEMP: no registered user match
     return None
 
-
-def match_or_create_temp_user(embedding):
     """
     Matches embedding with temp users or creates new one.
     """
