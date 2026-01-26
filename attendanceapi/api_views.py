@@ -14,6 +14,7 @@ from attendanceapi.services.face_recognition_service import (
 )
 from attendanceapi.services.attendance_service import has_recent_attendance
 from base.models import Department
+from attendanceapi.services.face_model import get_face_app
 
 BASE64_IMAGE_REGEX = re.compile(
     r"^[A-Za-z0-9+/=]+$"

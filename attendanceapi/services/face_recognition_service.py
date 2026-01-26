@@ -2,9 +2,8 @@ import numpy as np
 from django.utils import timezone
 
 from attendanceapi.models import FaceEmbedding, TempUser, TempAttendance
-from attendanceapi.utils import get_face_app
-
 from scipy.spatial.distance import cosine
+from attendanceapi.services.face_model import get_face_app
 
 
 def recognize_faces_from_frame(frame, threshold=0.5):
