@@ -1,74 +1,123 @@
+# -------------------------------
+# In-memory short-term face cache
+# -------------------------------
+FACE_STABILITY_CACHE = {}
+FACE_CONFIRMATION_FRAMES = 3
+FACE_CACHE_TTL_SECONDS = 5
+
 import numpy as np
 from django.utils import timezone
-
 from attendanceapi.models import FaceEmbedding, TempUser, TempAttendance
 from scipy.spatial.distance import cosine
 from attendanceapi.services.face_model import get_face_app
 from django.utils.crypto import get_random_string
 
+def _embedding_key(embedding, precision=2):
+    """
+    Reduce embedding noise to allow stable hashing.
+    """
+    return tuple(np.round(embedding, precision))
+
+def _cleanup_face_cache():
+    now = timezone.now()
+    expired = [
+        k for k, v in FACE_STABILITY_CACHE.items()
+        if (now - v["last_seen"]).total_seconds() > FACE_CACHE_TTL_SECONDS
+    ]
+    for k in expired:
+        del FACE_STABILITY_CACHE[k]
+
 def recognize_faces_from_frame(frame, threshold=0.5):
     """
-    Core face recognition logic.
-    This function does NOT handle HTTP or database writes.
+    Attendance-grade face recognition with temporal stability.
     """
 
     app = get_face_app()
     detected_faces = app.get(frame)
 
+    if not detected_faces:
+        return []
+
+    _cleanup_face_cache()
+
+    embeddings_db = FaceEmbedding.objects.select_related("user").all()
     results = []
 
-    if not detected_faces:
-        return results
-
-    embeddings = FaceEmbedding.objects.select_related("user").all()
-
     for face in detected_faces:
+        embedding = np.array(face.embedding)
+        emb_key = _embedding_key(embedding)
+
+        # ------------------------------------
+        # Step 1: DB match (registered users)
+        # ------------------------------------
         best_match = None
         best_distance = float("inf")
 
-        for record in embeddings:
-            distance = cosine(
-                np.array(record.embedding),
-                face.embedding
-            )
-
-            if distance < best_distance:
-                best_distance = distance
+        for record in embeddings_db:
+            dist = cosine(np.array(record.embedding), embedding)
+            if dist < best_distance:
+                best_distance = dist
                 best_match = record
 
-        if best_match and best_distance <= threshold:
-            results.append({
-                "recognized": True,
-                "user_id": str(best_match.user.id),
-                "confidence": round(1 - best_distance, 3),
-            })
-        else:
-            results.append({
-                "recognized": False,
-                "confidence": None,
-            })
+        # ------------------------------------
+        # Step 2: Update stability cache
+        # ------------------------------------
+        cache = FACE_STABILITY_CACHE.get(emb_key)
+
+        if not cache:
+            FACE_STABILITY_CACHE[emb_key] = {
+                "count": 1,
+                "last_seen": timezone.now(),
+                "best_match": best_match,
+                "best_distance": best_distance,
+            }
+            continue
+
+        cache["count"] += 1
+        cache["last_seen"] = timezone.now()
+
+        # ------------------------------------
+        # Step 3: Confirm recognition
+        # ------------------------------------
+        bbox = face.bbox.astype(int).tolist()
+
+        if cache["count"] >= FACE_CONFIRMATION_FRAMES:
+            if best_match and best_distance <= threshold:
+                results.append({
+                    "recognized": True,
+                    "user": best_match.user,
+                    "distance": best_distance,
+                    "bbox": bbox,
+                })
+
+            else:
+                results.append({
+                    "recognized": False,
+                    "embedding": embedding,
+                    "bbox": bbox,
+                })
 
     return results
 
-
-TEMP_THRESHOLD = 0.65
-
 def match_or_create_temp_user(embedding):
     """
-    Match unrecognized face to existing TempUser or create a new one.
-    Returns (temp_user, created)
+    Attendance-grade unknown face handling.
     """
 
-    TEMP_THRESHOLD = 0.65
+    _cleanup_face_cache()
+    emb_key = _embedding_key(embedding)
+
+    # Only create temp user AFTER stability
+    cache = FACE_STABILITY_CACHE.get(emb_key)
+    if not cache or cache["count"] < FACE_CONFIRMATION_FRAMES:
+        return None, False
 
     temps = TempUser.objects.all()
     best_match = None
     best_distance = float("inf")
 
-    # Try to match existing temp users
     for temp in temps:
-        stored_embedding = np.array(temp.face_embedding)
-        dist = cosine(embedding, stored_embedding)
+        dist = cosine(embedding, np.array(temp.face_embedding))
         if dist < best_distance:
             best_distance = dist
             best_match = temp
@@ -78,24 +127,15 @@ def match_or_create_temp_user(embedding):
         best_match.save()
         return best_match, False
 
-    # Generate unique temp_username
-    while True:
-        username_candidate = f"visitor_{get_random_string(8)}"
-        if not TempUser.objects.filter(temp_username=username_candidate).exists():
-            break
+    # Create only ONCE
+    username = f"visitor_{get_random_string(8)}"
+    email = f"{username}@mispartechnologies.com"
 
-    # Generate unique temp_email
-    while True:
-        email_candidate = f"{username_candidate}@mispartechnologies.com"
-        if not TempUser.objects.filter(temp_email=email_candidate).exists():
-            break
-
-    # Create new temp user
     temp_user = TempUser.objects.create(
-        temp_username=username_candidate,
-        temp_email=email_candidate,
+        temp_username=username,
+        temp_email=email,
         face_embedding=embedding.tolist(),
-        appearances=1
+        appearances=1,
     )
 
     return temp_user, True

@@ -45,3 +45,4 @@ class TempAttendance(models.Model):
 
     def __str__(self):
         return f"TempAttendance: {self.temp_user.temp_username} - {self.date}"
+

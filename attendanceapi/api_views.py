@@ -109,7 +109,20 @@ def recognize_frame(request):
         # 5. Recognize registered user
         # -------------------------------
         try:
-            user = recognize_face(embedding)
+            results = recognize_faces_from_frame(frame)
+
+            if not results:
+                return Response({
+                    "status": "success",
+                    "code": "FACE_UNSTABLE",
+                    "message": "Face detected but not yet stable",
+                    "data": {"faces": []}
+                })
+
+            result = results[0]
+
+            user = result["user"] if result["recognized"] else None
+
         except Exception as e:
             print(f"⚠️ Error recognizing registered user: {e}")
             user = None
