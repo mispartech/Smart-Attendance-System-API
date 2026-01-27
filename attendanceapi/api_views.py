@@ -5,7 +5,7 @@ from django.db import transaction
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from attendanceapi.models import Attendance, FaceEmbedding
+from attendanceapi.models import Attendance, FaceEmbedding, TempUser
 from attendanceapi.services.face_recognition_service import (
     extract_face_embedding,
     recognize_face,
@@ -27,6 +27,7 @@ def recognize_frame(request):
     Accepts a base64 image frame and returns:
     - Registered user if matched
     - Temporary user if not matched
+    Provides explicit debug info for every failure point.
     """
 
     print("RAW request.data:", request.data)
@@ -35,6 +36,7 @@ def recognize_frame(request):
     frame_data = request.data.get("frame")
 
     if not frame_data:
+        print("⚠️ Frame missing in request")
         return Response({
             "status": "error",
             "code": "FRAME_MISSING",
@@ -54,11 +56,13 @@ def recognize_frame(request):
         # -------------------------------
         try:
             image_bytes = base64.b64decode(frame_data, validate=True)
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ Invalid base64 encoding: {e}")
             return Response({
                 "status": "error",
                 "code": "INVALID_BASE64",
                 "message": "Invalid base64 image encoding",
+                "debug": str(e) if settings.DEBUG else None,
                 "data": {}
             }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -68,7 +72,8 @@ def recognize_frame(request):
         np_arr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-        if frame is None:
+        if frame is None or frame.size == 0:
+            print("⚠️ Decoded frame is invalid or empty")
             return Response({
                 "status": "error",
                 "code": "INVALID_IMAGE",
@@ -77,26 +82,40 @@ def recognize_frame(request):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         # -------------------------------
-        # 4. Extract embedding
+        # 4. Extract face embedding
         # -------------------------------
-        embedding = extract_face_embedding(frame)
+        try:
+            embedding = extract_face_embedding(frame)
+        except Exception as e:
+            print(f"⚠️ Error extracting face embedding: {e}")
+            return Response({
+                "status": "error",
+                "code": "EMBEDDING_EXTRACTION_FAILED",
+                "message": "Failed to extract face embedding",
+                "debug": str(e) if settings.DEBUG else None,
+                "data": {}
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if embedding is None:
+            print("⚠️ No face detected or embedding is None")
             return Response({
                 "status": "success",
                 "code": "NO_FACE",
                 "message": "No face detected in frame",
-                "data": {
-                    "faces": []
-                }
+                "data": {"faces": []}
             }, status=status.HTTP_200_OK)
 
         # -------------------------------
         # 5. Recognize registered user
         # -------------------------------
-        user = recognize_face(embedding)
+        try:
+            user = recognize_face(embedding)
+        except Exception as e:
+            print(f"⚠️ Error recognizing registered user: {e}")
+            user = None
 
         if user:
+            print(f"✅ Registered user recognized: {user}")
             return Response({
                 "status": "success",
                 "code": "FACE_RECOGNIZED",
@@ -114,7 +133,18 @@ def recognize_frame(request):
         # -------------------------------
         # 6. Temporary user fallback
         # -------------------------------
-        temp_user, created = match_or_create_temp_user(embedding)
+        try:
+            temp_user, created = match_or_create_temp_user(embedding)
+            print(f"ℹ️ Temporary user {'created' if created else 'matched'}: {temp_user.temp_username}")
+        except Exception as e:
+            print(f"⚠️ Error creating/matching temp user: {e}")
+            return Response({
+                "status": "error",
+                "code": "TEMP_USER_FAILED",
+                "message": "Failed to match or create temporary user",
+                "debug": str(e) if settings.DEBUG else None,
+                "data": {}
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({
             "status": "success",
@@ -132,7 +162,7 @@ def recognize_frame(request):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        print("🔥 recognize_frame ERROR:", str(e))
+        print("🔥 Unexpected error in recognize_frame:", str(e))
         return Response({
             "status": "error",
             "code": "RECOGNITION_FAILED",
@@ -140,7 +170,6 @@ def recognize_frame(request):
             "debug": str(e) if settings.DEBUG else "Internal error",
             "data": {}
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 @api_view(["POST"])
 def mark_attendance(request):
