@@ -4,7 +4,7 @@ from django.utils import timezone
 from attendanceapi.models import FaceEmbedding, TempUser, TempAttendance
 from scipy.spatial.distance import cosine
 from attendanceapi.services.face_model import get_face_app
-
+from django.utils.crypto import get_random_string
 
 def recognize_faces_from_frame(frame, threshold=0.5):
     """
@@ -60,14 +60,12 @@ def match_or_create_temp_user(embedding):
     """
 
     temps = TempUser.objects.all()
-
     best_match = None
     best_distance = float("inf")
 
     for temp in temps:
         stored_embedding = np.array(temp.face_embedding)
         dist = cosine(embedding, stored_embedding)
-
         if dist < best_distance:
             best_distance = dist
             best_match = temp
@@ -77,9 +75,17 @@ def match_or_create_temp_user(embedding):
         best_match.save()
         return best_match, False
 
-    return TempUser.objects.create(
-        face_embedding=embedding.tolist()
-    ), True
+    # Generate a **unique temporary email** for new TempUser
+    unique_email = f"temp_{get_random_string(12)}@mispartechnologies.com"
+
+    temp_user, created = TempUser.objects.get_or_create(
+        temp_email=unique_email,
+        defaults={
+            "face_embedding": embedding.tolist(),
+            "appearances": 1
+        }
+    )
+    return temp_user, created
 
 def extract_face_embedding(frame):
     """
