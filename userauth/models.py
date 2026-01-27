@@ -75,6 +75,7 @@ class TempUser(models.Model):
     face_image = models.ImageField(upload_to="temp_faces/", null=True, blank=True)
     captured_image = models.ImageField(upload_to="temp_faces/", null=True, blank=True)
     face_embedding = models.JSONField(null=True, blank=True)
+    appearances = models.PositiveIntegerField(default=1)
     claimed = models.BooleanField(default=False)  # ✅ True when migrated to CustomUser
     created_at = models.DateTimeField(auto_now_add=True)
 
