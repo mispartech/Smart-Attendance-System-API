@@ -59,10 +59,13 @@ def match_or_create_temp_user(embedding):
     Returns (temp_user, created)
     """
 
+    TEMP_THRESHOLD = 0.65
+
     temps = TempUser.objects.all()
     best_match = None
     best_distance = float("inf")
 
+    # Try to match existing temp users
     for temp in temps:
         stored_embedding = np.array(temp.face_embedding)
         dist = cosine(embedding, stored_embedding)
@@ -75,17 +78,27 @@ def match_or_create_temp_user(embedding):
         best_match.save()
         return best_match, False
 
-    # Generate a **unique temporary email** for new TempUser
-    unique_email = f"temp_{get_random_string(12)}@mispartechnologies.com"
+    # Generate unique temp_username
+    while True:
+        username_candidate = f"visitor_{get_random_string(8)}"
+        if not TempUser.objects.filter(temp_username=username_candidate).exists():
+            break
 
-    temp_user, created = TempUser.objects.get_or_create(
-        temp_email=unique_email,
-        defaults={
-            "face_embedding": embedding.tolist(),
-            "appearances": 1
-        }
+    # Generate unique temp_email
+    while True:
+        email_candidate = f"{username_candidate}@mispartechnologies.com"
+        if not TempUser.objects.filter(temp_email=email_candidate).exists():
+            break
+
+    # Create new temp user
+    temp_user = TempUser.objects.create(
+        temp_username=username_candidate,
+        temp_email=email_candidate,
+        face_embedding=embedding.tolist(),
+        appearances=1
     )
-    return temp_user, created
+
+    return temp_user, True
 
 def extract_face_embedding(frame):
     """
