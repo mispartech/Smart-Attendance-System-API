@@ -15,6 +15,7 @@ from attendanceapi.services.face_recognition_service import (
 from attendanceapi.services.attendance_service import has_recent_attendance
 from base.models import Department
 from attendanceapi.services.face_model import get_face_app
+from attendanceapi.services.image_utils import decode_base64_image
 
 BASE64_IMAGE_REGEX = re.compile(
     r"^[A-Za-z0-9+/=]+$"
@@ -140,61 +141,58 @@ def recognize_frame(request):
             "data": {}
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-api_view(["POST"])
+
+@api_view(["POST"])
 def mark_attendance(request):
-
-    identity = request.data.get("identity")
-
-    if not identity or not isinstance(identity, dict):
-        return Response({
-            "status": "error",
-            "code": "IDENTITY_MISSING",
-            "message": "Identity object is required",
-            "data": {}
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-    identity_type = identity.get("type")
-    identity_id = identity.get("id")
-
-    if identity_type not in ["user", "temp"] or not identity_id:
-        return Response({
-            "status": "error",
-            "code": "INVALID_IDENTITY",
-            "message": "Identity type or id is invalid",
-            "data": {}
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-    """
-    Marks attendance using a face frame.
-    Immutable attendance record.
-    """
-
     frame_data = request.data.get("frame")
 
     if not frame_data:
-        return Response(
-            {"error": "frame is required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({
+            "status": "error",
+            "code": "FRAME_MISSING",
+            "message": "Frame field is required",
+            "data": {}
+        }, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        # 1️⃣ Face embedding
-        embedding = extract_face_embedding(frame_data)
+        # -------------------------------
+        # 1️⃣ Decode image
+        # -------------------------------
+        frame = decode_base64_image(frame_data)
+
+        if frame is None:
+            return Response({
+                "status": "error",
+                "code": "INVALID_IMAGE",
+                "message": "Invalid or corrupted image",
+                "data": {}
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # -------------------------------
+        # 2️⃣ Extract face embedding
+        # -------------------------------
+        embedding = extract_face_embedding(frame)
 
         if embedding is None:
-            return Response(
-                {"error": "No face detected"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({
+                "status": "success",
+                "code": "NO_FACE",
+                "message": "No face detected in frame",
+                "data": {}
+            }, status=status.HTTP_200_OK)
 
-        # 2️⃣ Registered user
+        # -------------------------------
+        # 3️⃣ Try registered user
+        # -------------------------------
         user = recognize_face(embedding)
 
         if user:
             if has_recent_attendance(user=user):
                 return Response({
                     "status": "duplicate",
-                    "message": "Attendance already marked recently"
+                    "code": "ATTENDANCE_DUPLICATE",
+                    "message": "Attendance already marked recently",
+                    "data": {}
                 }, status=status.HTTP_200_OK)
 
             attendance = Attendance.objects.create(
@@ -202,24 +200,26 @@ def mark_attendance(request):
                 timestamp=timezone.now()
             )
 
-        return Response({
-            "status": "success",
-            "code": "ATTENDANCE_MARKED",
-            "message": "Attendance recorded successfully",
-            "data": {
-                "attendance_id": attendance.id,
-                "user_id": user.id
-            }
-        }, status=status.HTTP_201_CREATED)
+            return Response({
+                "status": "success",
+                "code": "ATTENDANCE_MARKED",
+                "message": "Attendance recorded successfully",
+                "data": {
+                    "attendance_id": attendance.id,
+                    "user_id": user.id
+                }
+            }, status=status.HTTP_201_CREATED)
 
-        # 3️⃣ Temporary user
+        # -------------------------------
+        # 4️⃣ Temporary user fallback
+        # -------------------------------
         temp_user, created = match_or_create_temp_user(embedding)
 
         if has_recent_attendance(temp_user=temp_user):
             return Response({
                 "status": "duplicate",
-                "code": "ATTENDANCE_DUPLICATE",
-                "message": "Attendance already marked recently",
+                "code": "TEMP_ATTENDANCE_DUPLICATE",
+                "message": "Temporary attendance already marked recently",
                 "data": {}
             }, status=status.HTTP_200_OK)
 
@@ -233,16 +233,18 @@ def mark_attendance(request):
             "code": "TEMP_ATTENDANCE_MARKED",
             "message": "Temporary attendance recorded",
             "data": {
-                "temp_user_id": temp_user.id
+                "temp_user_id": temp_user.id,
+                "created": created
             }
         }, status=status.HTTP_201_CREATED)
 
-
     except Exception as e:
-        return Response(
-            {"error": str(e)},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({
+            "status": "error",
+            "code": "ATTENDANCE_FAILED",
+            "message": "Internal attendance error",
+            "debug": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(["GET"])
 def health_check(request):
