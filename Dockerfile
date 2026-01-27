@@ -48,6 +48,11 @@ RUN pip install --upgrade pip setuptools wheel \
 COPY . .
 
 # ----------------------------
+# Preload InsightFace model
+# ----------------------------
+RUN python -c "from attendanceapi.services.face_model import get_face_app; get_face_app()"
+
+# ----------------------------
 # Expose port
 # ----------------------------
 EXPOSE 8000
