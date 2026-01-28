@@ -24,19 +24,12 @@ BASE64_IMAGE_REGEX = re.compile(
 @api_view(["POST"])
 def recognize_frame(request):
     """
-    Accepts a base64 image frame and returns:
-    - Registered user if matched
-    - Temporary user if not matched
-    Provides explicit debug info for every failure point.
+    Accepts a base64 image frame and returns detected faces with bbox + identity.
     """
-
-    print("RAW request.data:", request.data)
-    print("Keys:", request.data.keys())
 
     frame_data = request.data.get("frame")
 
     if not frame_data:
-        print("⚠️ Frame missing in request")
         return Response({
             "status": "error",
             "code": "FRAME_MISSING",
@@ -45,148 +38,58 @@ def recognize_frame(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        # -------------------------------
-        # 1. Clean base64 header if exists
-        # -------------------------------
+        # 1. Strip base64 header
         if "," in frame_data:
             frame_data = frame_data.split(",")[1]
 
-        # -------------------------------
-        # 2. Decode base64 safely
-        # -------------------------------
-        try:
-            image_bytes = base64.b64decode(frame_data, validate=True)
-        except Exception as e:
-            print(f"⚠️ Invalid base64 encoding: {e}")
-            return Response({
-                "status": "error",
-                "code": "INVALID_BASE64",
-                "message": "Invalid base64 image encoding",
-                "debug": str(e) if settings.DEBUG else None,
-                "data": {}
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # -------------------------------
-        # 3. Convert to OpenCV image
-        # -------------------------------
+        # 2. Decode base64
+        image_bytes = base64.b64decode(frame_data)
         np_arr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
         if frame is None or frame.size == 0:
-            print("⚠️ Decoded frame is invalid or empty")
             return Response({
                 "status": "error",
                 "code": "INVALID_IMAGE",
-                "message": "Decoded image is invalid or corrupted",
+                "message": "Invalid image",
                 "data": {}
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # -------------------------------
-        # 4. Extract face embedding
-        # -------------------------------
-        try:
-            embedding = extract_face_embedding(frame)
-        except Exception as e:
-            print(f"⚠️ Error extracting face embedding: {e}")
-            return Response({
-                "status": "error",
-                "code": "EMBEDDING_EXTRACTION_FAILED",
-                "message": "Failed to extract face embedding",
-                "debug": str(e) if settings.DEBUG else None,
-                "data": {}
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # 3. Detect & recognize faces (MULTI-FACE)
+        results = recognize_faces_from_frame(frame)
 
-        if embedding is None:
-            print("⚠️ No face detected or embedding is None")
-            return Response({
-                "status": "success",
-                "code": "NO_FACE",
-                "message": "No face detected in frame",
-                "data": {"faces": []}
-            }, status=status.HTTP_200_OK)
+        faces = []
 
-        # -------------------------------
-        # 5. Recognize registered user
-        # -------------------------------
-        try:
-            results = recognize_faces_from_frame(frame)
-
-            if results and results[0].get("unstable"):
-                return Response({
-                    "status": "success",
-                    "code": "FACE_UNSTABLE",
-                    "message": "Face detected but not yet stable",
-                    "data": {
-                        "faces": [{
-                            "bbox": results[0]["bbox"],
-                            "recognized": False,
-                            "unstable": True,
-                        }]
-                    }
+        for result in results:
+            if result.get("recognized"):
+                user = result["user"]
+                faces.append({
+                    "recognized": True,
+                    "user_type": "registered",
+                    "user_id": str(user.id),
+                    "name": user.get_full_name() or user.username,
+                    "bbox": result["bbox"],
                 })
-
-            result = results[0]
-
-            user = result["user"] if result["recognized"] else None
-
-        except Exception as e:
-            print(f"⚠️ Error recognizing registered user: {e}")
-            user = None
-
-        if user:
-            print(f"✅ Registered user recognized: {user}")
-            return Response({
-                "status": "success",
-                "code": "FACE_RECOGNIZED",
-                "message": "Registered user recognized",
-                "data": {
-                    "faces": [{
-                        "recognized": True,
-                        "user_type": "registered",
-                        "user_id": str(user.id),
-                        "name": user.get_full_name() if hasattr(user, "get_full_name") else str(user),
-                    }]
-                }
-            }, status=status.HTTP_200_OK)
-
-        # -------------------------------
-        # 6. Temporary user fallback
-        # -------------------------------
-        try:
-            temp_user, created = match_or_create_temp_user(embedding)
-            print(f"ℹ️ Temporary user {'created' if created else 'matched'}: {temp_user.temp_username}")
-        except Exception as e:
-            print(f"⚠️ Error creating/matching temp user: {e}")
-            return Response({
-                "status": "error",
-                "code": "TEMP_USER_FAILED",
-                "message": "Failed to match or create temporary user",
-                "debug": str(e) if settings.DEBUG else None,
-                "data": {}
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            else:
+                faces.append({
+                    "recognized": False,
+                    "user_type": "unknown",
+                    "bbox": result["bbox"],
+                })
 
         return Response({
             "status": "success",
-            "code": "TEMP_USER",
-            "message": "Temporary user identified",
-            "data": {
-                "faces": [{
-                    "recognized": False,
-                    "user_type": "temporary",
-                    "temp_user_id": str(temp_user.id),
-                    "created": created,
-                    "appearances": temp_user.appearances,
-                }]
-            }
+            "code": "FACES_DETECTED" if faces else "NO_FACE",
+            "message": "Faces processed",
+            "data": {"faces": faces}
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        print("🔥 Unexpected error in recognize_frame:", str(e))
+        print("🔥 recognize_frame error:", str(e))
         return Response({
             "status": "error",
             "code": "RECOGNITION_FAILED",
             "message": "Internal recognition error",
-            "debug": str(e) if settings.DEBUG else "Internal error",
             "data": {}
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

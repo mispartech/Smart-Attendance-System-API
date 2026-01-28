@@ -45,7 +45,9 @@ def recognize_faces_from_frame(frame, threshold=0.5):
 
     for face in detected_faces:
         embedding = np.array(face.embedding)
-        emb_key = _embedding_key(embedding)
+        bbox = face.bbox.astype(int).tolist()
+        emb_key = _embedding_key(embedding) + tuple(bbox)
+
 
         # ------------------------------------
         # Step 1: DB match (registered users)
@@ -71,8 +73,6 @@ def recognize_faces_from_frame(frame, threshold=0.5):
                 "best_match": best_match,
                 "best_distance": best_distance,
             }
-
-            bbox = face.bbox.astype(int).tolist()
 
             results.append({
                 "recognized": False,
