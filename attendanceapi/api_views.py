@@ -111,12 +111,18 @@ def recognize_frame(request):
         try:
             results = recognize_faces_from_frame(frame)
 
-            if not results:
+            if results and results[0].get("unstable"):
                 return Response({
                     "status": "success",
                     "code": "FACE_UNSTABLE",
                     "message": "Face detected but not yet stable",
-                    "data": {"faces": []}
+                    "data": {
+                        "faces": [{
+                            "bbox": results[0]["bbox"],
+                            "recognized": False,
+                            "unstable": True,
+                        }]
+                    }
                 })
 
             result = results[0]

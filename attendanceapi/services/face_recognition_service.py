@@ -71,6 +71,14 @@ def recognize_faces_from_frame(frame, threshold=0.5):
                 "best_match": best_match,
                 "best_distance": best_distance,
             }
+
+            bbox = face.bbox.astype(int).tolist()
+
+            results.append({
+                "recognized": False,
+                "unstable": True,
+                "bbox": bbox,
+            })
             continue
 
         cache["count"] += 1
@@ -96,6 +104,14 @@ def recognize_faces_from_frame(frame, threshold=0.5):
                     "embedding": embedding,
                     "bbox": bbox,
                 })
+
+        else:
+            bbox = face.bbox.astype(int).tolist()
+            results.append({
+                "recognized": False,
+                "unstable": True,
+                "bbox": bbox,
+            })
 
     return results
 
